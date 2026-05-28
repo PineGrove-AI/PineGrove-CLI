@@ -8,7 +8,7 @@ to support your PineGrove application.
 ## Installation 
 
 ```bash
-curl -fsSL https://git.getpinegrove.eu/pinegrove/pinegrove-cli/raw/branch/main/install.sh | bash
+curl -fsSL https://git.getpinegrove.eu/pinegrove-community/pinegrove-cli/raw/branch/main/install.sh | bash
 ```
 
 The installer downloads the CLI binary, creates a self-contained Python runtime, and installs vllm into it. CUDA version is detected automatically. No manual Python or venv setup required.

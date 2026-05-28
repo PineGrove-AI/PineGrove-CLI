@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BINARY_URL="https://git.getpinegrove.eu/pinegrove/pinegrove-cli/releases/latest/download/pinegrove-cli"
+BINARY_URL="https://git.getpinegrove.eu/pinegrove-community/pinegrove-cli/releases/latest/download/pinegrove-cli"
 INSTALL_DIR="${PINEGROVE_INSTALL_DIR:-$HOME/.local/share/pinegrove-cli}"
 BIN_DIR="${PINEGROVE_BIN_DIR:-$HOME/.local/bin}"
 VENV_DIR="$INSTALL_DIR/runtime/python"
