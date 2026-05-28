@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BINARY_URL="https://git.getpinegrove.eu/pinegrove-community/pinegrove-cli/releases/latest/download/pinegrove-cli"
+GITEA_API="https://git.getpinegrove.eu/api/v1/repos/pinegrove-community/pinegrove-cli"
 INSTALL_DIR="${PINEGROVE_INSTALL_DIR:-$HOME/.local/share/pinegrove-cli}"
 BIN_DIR="${PINEGROVE_BIN_DIR:-$HOME/.local/bin}"
 VENV_DIR="$INSTALL_DIR/runtime/python"
@@ -57,6 +57,12 @@ info "Installing pinegrove-cli to $INSTALL_DIR"
 mkdir -p "$INSTALL_DIR" "$BIN_DIR"
 
 info "Downloading binary..."
+BINARY_URL=$(curl -fsSL "${GITEA_API}/releases?limit=1" \
+    | python3 -c "
+import sys, json
+assets = json.load(sys.stdin)[0]['assets']
+print(next(a['browser_download_url'] for a in assets if a['name'] == 'pinegrove-cli'))
+") || die "Could not resolve download URL. Does a release exist?"
 curl -fsSL "$BINARY_URL" -o "$INSTALL_DIR/pinegrove-cli"
 chmod +x "$INSTALL_DIR/pinegrove-cli"
 
