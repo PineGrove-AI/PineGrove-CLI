@@ -1,0 +1,47 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build
+        run: |
+          dotnet publish src/Pinegrove.Cli/Pinegrove.Cli.csproj \
+            -c Release -r linux-x64 \
+            --self-contained true \
+            /p:PublishSingleFile=true
+
+      - name: Publish release
+        env:
+          GITEA_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SHORT_SHA="${GITHUB_SHA:0:7}"
+          TAG="build-${SHORT_SHA}"
+          BINARY="src/Pinegrove.Cli/bin/Release/net10.0/linux-x64/publish/pinegrove-cli"
+          API="${GITHUB_SERVER_URL}/api/v1/repos/${GITHUB_REPOSITORY}"
+          AUTH="Authorization: token ${GITEA_TOKEN}"
+
+          RELEASE_ID=$(curl -fsSL -X POST "${API}/releases" \
+            -H "$AUTH" -H "Content-Type: application/json" \
+            -d "{
+              \"tag_name\": \"${TAG}\",
+              \"target_commitish\": \"${GITHUB_SHA}\",
+              \"name\": \"Build ${SHORT_SHA}\"
+            }" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+
+          curl -fsSL -X POST \
+            "${API}/releases/${RELEASE_ID}/assets?name=pinegrove-cli" \
+            -H "$AUTH" -H "Content-Type: application/octet-stream" \
+            --data-binary "@${BINARY}"

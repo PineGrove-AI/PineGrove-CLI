@@ -1,0 +1,5 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Pinegrove.Cli/Pinegrove.Cli.csproj" />
+  </Folder>
+</Solution>

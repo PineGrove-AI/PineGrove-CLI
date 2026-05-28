@@ -1,0 +1,13 @@
+models:
+  - name: llama3
+    model: meta-llama/Llama-3-8B-Instruct
+    port: 8000
+    args:
+      tensor-parallel-size: 1
+      max-model-len: 8192
+
+  - name: mistral
+    model: mistralai/Mistral-7B-Instruct
+    port: 8001
+    args:
+      max-model-len: 4096
