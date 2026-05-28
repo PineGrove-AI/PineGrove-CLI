@@ -19,6 +19,11 @@ for cmd in curl python3; do
     command -v "$cmd" &>/dev/null || die "'$cmd' is required but not installed."
 done
 
+if ! python3 -m venv --help &>/dev/null; then
+    warn "python3-venv not found — installing it now (requires sudo)..."
+    sudo apt-get install -y python3-venv || die "Failed to install python3-venv. Try: sudo apt install python3-venv"
+fi
+
 # Require Python 3.9+
 python3 -c '
 import sys
