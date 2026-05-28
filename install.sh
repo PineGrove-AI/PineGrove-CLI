@@ -7,8 +7,8 @@ BIN_DIR="${PINEGROVE_BIN_DIR:-$HOME/.local/bin}"
 VENV_DIR="$INSTALL_DIR/runtime/python"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BOLD='\033[1m'; NC='\033[0m'
-info()  { echo -e "${GREEN}==>${NC} ${BOLD}$*${NC}"; }
-warn()  { echo -e "${YELLOW}warning:${NC} $*"; }
+info()  { echo -e "${GREEN}==>${NC} ${BOLD}$*${NC}" >&2; }
+warn()  { echo -e "${YELLOW}warning:${NC} $*" >&2; }
 die()   { echo -e "${RED}error:${NC} $*" >&2; exit 1; }
 
 # ── Prerequisites ──────────────────────────────────────────────────────────────
