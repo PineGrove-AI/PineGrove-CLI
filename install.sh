@@ -19,9 +19,10 @@ for cmd in curl python3; do
     command -v "$cmd" &>/dev/null || die "'$cmd' is required but not installed."
 done
 
-if ! python3 -m venv --help &>/dev/null; then
-    warn "python3-venv not found — installing it now (requires sudo)..."
-    sudo apt-get install -y python3-venv || die "Failed to install python3-venv. Try: sudo apt install python3-venv"
+if ! python3 -c "import ensurepip" &>/dev/null; then
+    PY_VER=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+    warn "python3-venv not found — installing python${PY_VER}-venv now (requires sudo)..."
+    sudo apt-get install -y "python${PY_VER}-venv" || die "Failed to install python${PY_VER}-venv. Try: sudo apt install python${PY_VER}-venv"
 fi
 
 # Require Python 3.9+
