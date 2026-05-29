@@ -57,6 +57,22 @@ resolve_vllm_install_args() {
     fi
 }
 
+# ── Intro & confirmation ───────────────────────────────────────────────────────
+
+echo -e ""
+echo -e "${BOLD}Welcome to PineGrove CLI${NC}"
+echo -e ""
+echo -e "This installer will set up:"
+echo -e "  • The pinegrove-cli binary"
+echo -e "  • A self-contained Python runtime (no system Python conflicts)"
+echo -e "  • vllm and its dependencies, with CUDA auto-detected for your GPU"
+echo -e ""
+echo -e "  Install location: ${BOLD}$INSTALL_DIR${NC}"
+echo -e ""
+read -r -p "Proceed with installation? [Y/n] " CONFIRM
+[[ "${CONFIRM,,}" != "n" ]] || { echo "Aborted."; exit 0; }
+echo ""
+
 # ── Install ────────────────────────────────────────────────────────────────────
 
 info "Installing pinegrove-cli to $INSTALL_DIR"
