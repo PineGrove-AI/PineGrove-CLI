@@ -14,39 +14,28 @@ public sealed class PythonLauncher
 
     public Process Launch(ModelConfig model, string logFilePath)
     {
-        var psi = new ProcessStartInfo
-        {
-            FileName = _pythonPath,
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true,
-        };
-
-        foreach (var arg in BuildArguments(model))
-            psi.ArgumentList.Add(arg);
-
-        // Prevent vLLM / torch from picking up any system Python
-        psi.Environment["PYTHONNOUSERSITE"] = "1";
-
-        var process = new Process { StartInfo = psi };
-
         var logDir = Path.GetDirectoryName(logFilePath)!;
         Directory.CreateDirectory(logDir);
 
-        process.Start();
-
-        _ = Task.Run(async () =>
+        // Use bash to redirect output directly to the log file.
+        // "$@" expands each argument as a separate word, so no shell escaping is needed.
+        // The log path is passed via environment variable for the same reason.
+        var psi = new ProcessStartInfo
         {
-            using var log = new StreamWriter(logFilePath, append: true) { AutoFlush = true };
-            var gate = new SemaphoreSlim(1, 1);
-            await Task.WhenAll(
-                PipeAsync(process.StandardOutput, log, "", gate),
-                PipeAsync(process.StandardError, log, "[stderr] ", gate));
-            await process.WaitForExitAsync();
-            await log.WriteLineAsync($"[pinegrove] Process exited with code {process.ExitCode}");
-        });
+            FileName = "/bin/bash",
+            UseShellExecute = false,
+        };
+        psi.Environment["PYTHONNOUSERSITE"] = "1";
+        psi.Environment["LOG"] = logFilePath;
+        psi.ArgumentList.Add("-c");
+        psi.ArgumentList.Add("\"$@\" >> \"$LOG\" 2>&1; echo \"[pinegrove] Process exited with code $?\" >> \"$LOG\"");
+        psi.ArgumentList.Add("--");
+        psi.ArgumentList.Add(_pythonPath);
+        foreach (var arg in BuildArguments(model))
+            psi.ArgumentList.Add(arg);
 
+        var process = new Process { StartInfo = psi };
+        process.Start();
         return process;
     }
 
@@ -69,17 +58,6 @@ public sealed class PythonLauncher
         }
 
         return parts;
-    }
-
-    private static async Task PipeAsync(TextReader reader, StreamWriter writer, string prefix, SemaphoreSlim gate)
-    {
-        string? line;
-        while ((line = await reader.ReadLineAsync()) is not null)
-        {
-            await gate.WaitAsync();
-            try { await writer.WriteLineAsync(prefix + line); }
-            finally { gate.Release(); }
-        }
     }
 
     private static string ResolvePythonPath()
