@@ -29,40 +29,23 @@ public sealed class PythonLauncher
         // Prevent vLLM / torch from picking up any system Python
         psi.Environment["PYTHONNOUSERSITE"] = "1";
 
-        var process = new Process
-        {
-            StartInfo = psi,
-            EnableRaisingEvents = true,
-        };
+        var process = new Process { StartInfo = psi };
 
         var logDir = Path.GetDirectoryName(logFilePath)!;
         Directory.CreateDirectory(logDir);
 
-        var logStream = new StreamWriter(logFilePath, append: true) { AutoFlush = true };
-
-        process.OutputDataReceived += (_, e) =>
-        {
-            if (e.Data is not null)
-                logStream.WriteLine(e.Data);
-        };
-
-        process.ErrorDataReceived += (_, e) =>
-        {
-            if (e.Data is not null)
-                logStream.WriteLine($"[stderr] {e.Data}");
-        };
-
-        process.Exited += (_, _) =>
-        {
-            // WaitForExit() with no timeout drains any pending async output before we close
-            process.WaitForExit();
-            logStream.WriteLine($"[pinegrove] Process exited with code {process.ExitCode}");
-            logStream.Close();
-        };
-
         process.Start();
-        process.BeginOutputReadLine();
-        process.BeginErrorReadLine();
+
+        _ = Task.Run(async () =>
+        {
+            using var log = new StreamWriter(logFilePath, append: true) { AutoFlush = true };
+            var gate = new SemaphoreSlim(1, 1);
+            await Task.WhenAll(
+                PipeAsync(process.StandardOutput, log, "", gate),
+                PipeAsync(process.StandardError, log, "[stderr] ", gate));
+            await process.WaitForExitAsync();
+            await log.WriteLineAsync($"[pinegrove] Process exited with code {process.ExitCode}");
+        });
 
         return process;
     }
@@ -86,6 +69,17 @@ public sealed class PythonLauncher
         }
 
         return parts;
+    }
+
+    private static async Task PipeAsync(TextReader reader, StreamWriter writer, string prefix, SemaphoreSlim gate)
+    {
+        string? line;
+        while ((line = await reader.ReadLineAsync()) is not null)
+        {
+            await gate.WaitAsync();
+            try { await writer.WriteLineAsync(prefix + line); }
+            finally { gate.Release(); }
+        }
     }
 
     private static string ResolvePythonPath()
