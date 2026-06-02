@@ -1,49 +1,35 @@
+using System.Diagnostics;
+
 namespace Pinegrove.Cli.Services;
 
 public static class LogService
 {
     public static async Task TailAsync(string modelName, int lines, bool follow, CancellationToken ct)
     {
-        var logPath = ProcessManager.GetLogPath(modelName);
+        var containerName = DockerLauncher.GetContainerName(modelName);
 
-        if (!File.Exists(logPath))
+        var psi = new ProcessStartInfo
         {
-            Console.Error.WriteLine($"No log file found for '{modelName}' at: {logPath}");
-            return;
+            FileName = "docker",
+            UseShellExecute = false,
+        };
+        psi.ArgumentList.Add("logs");
+        psi.ArgumentList.Add("--tail"); psi.ArgumentList.Add(lines.ToString());
+        if (follow)
+            psi.ArgumentList.Add("--follow");
+        psi.ArgumentList.Add(containerName);
+
+        using var process = new Process { StartInfo = psi };
+        ct.Register(() => { try { process.Kill(); } catch { } });
+        process.Start();
+
+        try
+        {
+            await process.WaitForExitAsync(ct);
         }
-
-        // Print last N lines
-        var allLines = await File.ReadAllLinesAsync(logPath, ct);
-        var startIndex = Math.Max(0, allLines.Length - lines);
-        for (var i = startIndex; i < allLines.Length; i++)
-            Console.WriteLine(allLines[i]);
-
-        if (!follow)
-            return;
-
-        // Follow mode: watch for new content
-        using var fs = new FileStream(logPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-        fs.Seek(0, SeekOrigin.End);
-        using var reader = new StreamReader(fs);
-
-        while (!ct.IsCancellationRequested)
+        catch (OperationCanceledException)
         {
-            var line = await reader.ReadLineAsync(ct);
-            if (line is not null)
-            {
-                Console.WriteLine(line);
-            }
-            else
-            {
-                try
-                {
-                    await Task.Delay(250, ct);
-                }
-                catch (OperationCanceledException)
-                {
-                    break;
-                }
-            }
+            // Normal exit via Ctrl+C
         }
     }
 }

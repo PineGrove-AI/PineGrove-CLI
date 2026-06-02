@@ -21,8 +21,7 @@ public static class StopCommand
             try
             {
                 var config = ConfigLoader.Load(configPath);
-                var launcher = new PythonLauncher();
-                var pm = new ProcessManager(launcher);
+                var pm = new ProcessManager();
 
                 Console.WriteLine("Stopping all models...");
                 pm.StopAll(config);

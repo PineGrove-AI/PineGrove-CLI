@@ -36,8 +36,7 @@ public static class RestartCommand
                     return;
                 }
 
-                var launcher = new PythonLauncher();
-                var pm = new ProcessManager(launcher);
+                var pm = new ProcessManager();
 
                 Console.WriteLine($"Restarting '{name}'...");
                 pm.StopModel(name);

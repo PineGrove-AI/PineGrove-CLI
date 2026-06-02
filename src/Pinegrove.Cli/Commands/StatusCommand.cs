@@ -30,8 +30,7 @@ public static class StatusCommand
             try
             {
                 var config = ConfigLoader.Load(configPath);
-                var launcher = new PythonLauncher();
-                var pm = new ProcessManager(launcher);
+                var pm = new ProcessManager();
 
                 var statuses = await pm.GetStatusAsync(config);
 
@@ -47,14 +46,14 @@ public static class StatusCommand
                 }
                 else
                 {
-                    Console.WriteLine($"{"NAME",-20} {"MODEL",-40} {"PORT",-8} {"PID",-10} {"STATE",-20} {"HEALTH",-8}");
-                    Console.WriteLine(new string('-', 106));
+                    Console.WriteLine($"{"NAME",-20} {"MODEL",-40} {"PORT",-8} {"CONTAINER",-30} {"STATE",-12} {"HEALTH",-8}");
+                    Console.WriteLine(new string('-', 118));
 
                     foreach (var s in statuses)
                     {
-                        var pidStr = s.Pid?.ToString() ?? "-";
+                        var containerStr = s.ContainerName ?? "-";
                         var healthStr = s.State == "running" ? (s.Healthy ? "ok" : "fail") : "-";
-                        Console.WriteLine($"{s.Name,-20} {s.Model,-40} {s.Port,-8} {pidStr,-10} {s.State,-20} {healthStr,-8}");
+                        Console.WriteLine($"{s.Name,-20} {s.Model,-40} {s.Port,-8} {containerStr,-30} {s.State,-12} {healthStr,-8}");
                     }
                 }
             }

@@ -7,16 +7,15 @@ public static class CleanupCommand
 {
     public static Command Create()
     {
-        var cmd = new Command("cleanup", "Detect and kill orphan vLLM processes, remove stale PID files");
+        var cmd = new Command("cleanup", "Stop all running pinegrove containers");
 
         cmd.SetHandler(() =>
         {
             try
             {
-                var launcher = new PythonLauncher();
-                var pm = new ProcessManager(launcher);
+                var pm = new ProcessManager();
 
-                Console.WriteLine("Cleaning up orphan processes...");
+                Console.WriteLine("Cleaning up pinegrove containers...");
                 pm.Cleanup();
             }
             catch (Exception ex)

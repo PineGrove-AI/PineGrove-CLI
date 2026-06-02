@@ -1,51 +1,33 @@
 using System.Diagnostics;
 using System.Net.Sockets;
-using System.Text.Json;
 using Pinegrove.Cli.Models;
 
 namespace Pinegrove.Cli.Services;
 
 public sealed class ProcessManager
 {
-    private static readonly string PidDir = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".pinegrove", "pids");
-
-    private static readonly string LogDir = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".pinegrove", "logs");
-
-    private readonly PythonLauncher _launcher;
-
-    public ProcessManager(PythonLauncher launcher)
-    {
-        _launcher = launcher;
-        Directory.CreateDirectory(PidDir);
-        Directory.CreateDirectory(LogDir);
-    }
+    private readonly DockerLauncher _launcher = new();
 
     public void StartModel(ModelConfig model)
     {
-        // Check for stale PID
-        var existingPid = ReadPid(model.Name);
-        if (existingPid.HasValue && IsProcessRunning(existingPid.Value))
+        var containerName = DockerLauncher.GetContainerName(model.Name);
+
+        if (IsContainerRunning(containerName))
         {
-            Console.WriteLine($"  [{model.Name}] Already running (PID {existingPid.Value}). Skipping.");
+            Console.WriteLine($"  [{model.Name}] Already running (container {containerName}). Skipping.");
             return;
         }
 
-        // Check port availability
         if (IsPortInUse(model.Port))
         {
             Console.Error.WriteLine($"  [{model.Name}] FAILED: Port {model.Port} is already in use.");
             return;
         }
 
-        var logFile = Path.Combine(LogDir, $"{model.Name}.log");
-
         try
         {
-            var process = _launcher.Launch(model, logFile);
-            WritePid(model.Name, process.Id);
-            Console.WriteLine($"  [{model.Name}] Started (PID {process.Id}, port {model.Port})");
+            _launcher.Launch(model);
+            Console.WriteLine($"  [{model.Name}] Started (container {containerName}, port {model.Port})");
         }
         catch (Exception ex)
         {
@@ -55,43 +37,22 @@ public sealed class ProcessManager
 
     public void StopModel(string name)
     {
-        var pid = ReadPid(name);
-        if (!pid.HasValue)
-        {
-            Console.WriteLine($"  [{name}] No PID file found. Not running.");
-            return;
-        }
+        var containerName = DockerLauncher.GetContainerName(name);
 
-        if (!IsProcessRunning(pid.Value))
+        if (!IsContainerRunning(containerName))
         {
-            Console.WriteLine($"  [{name}] Process {pid.Value} is not running (stale PID). Cleaning up.");
-            RemovePid(name);
+            Console.WriteLine($"  [{name}] Not running. Nothing to stop.");
             return;
         }
 
         try
         {
-            var process = Process.GetProcessById(pid.Value);
-
-            // Try graceful shutdown first (SIGTERM on Linux)
-            process.Kill(entireProcessTree: true);
-            process.WaitForExit(TimeSpan.FromSeconds(10));
-
-            if (!process.HasExited)
-            {
-                Console.Error.WriteLine($"  [{name}] Force killing PID {pid.Value}...");
-                process.Kill();
-            }
-
-            Console.WriteLine($"  [{name}] Stopped (PID {pid.Value}).");
+            RunDocker("stop", containerName);
+            Console.WriteLine($"  [{name}] Stopped.");
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"  [{name}] Error stopping PID {pid.Value}: {ex.Message}");
-        }
-        finally
-        {
-            RemovePid(name);
+            Console.Error.WriteLine($"  [{name}] Error stopping: {ex.Message}");
         }
     }
 
@@ -107,29 +68,18 @@ public sealed class ProcessManager
 
         foreach (var model in config.Models)
         {
+            var containerName = DockerLauncher.GetContainerName(model.Name);
+            var running = IsContainerRunning(containerName);
+
             var status = new ModelStatus
             {
                 Name = model.Name,
                 Model = model.Model,
                 Port = model.Port,
+                ContainerName = containerName,
+                State = running ? "running" : "stopped",
+                Healthy = running && await CheckHealthAsync(model.Port),
             };
-
-            var pid = ReadPid(model.Name);
-            status.Pid = pid;
-
-            if (pid.HasValue && IsProcessRunning(pid.Value))
-            {
-                status.State = "running";
-                status.Healthy = await CheckHealthAsync(model.Port);
-            }
-            else if (pid.HasValue)
-            {
-                status.State = "dead (stale PID)";
-            }
-            else
-            {
-                status.State = "stopped";
-            }
 
             statuses.Add(status);
         }
@@ -139,96 +89,91 @@ public sealed class ProcessManager
 
     public void Cleanup()
     {
-        if (!Directory.Exists(PidDir))
+        var psi = new ProcessStartInfo
         {
-            Console.WriteLine("No PID directory found. Nothing to clean up.");
+            FileName = "docker",
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+        };
+        psi.ArgumentList.Add("ps");
+        psi.ArgumentList.Add("-q");
+        psi.ArgumentList.Add("--filter"); psi.ArgumentList.Add("name=pinegrove-");
+
+        using var listProcess = new Process { StartInfo = psi };
+        listProcess.Start();
+        var output = listProcess.StandardOutput.ReadToEnd().Trim();
+        listProcess.WaitForExit();
+
+        if (string.IsNullOrEmpty(output))
+        {
+            Console.WriteLine("No pinegrove containers running. Nothing to clean up.");
             return;
         }
 
-        var pidFiles = Directory.GetFiles(PidDir, "*.pid");
-        if (pidFiles.Length == 0)
+        foreach (var id in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
         {
-            Console.WriteLine("No PID files found. Nothing to clean up.");
-            return;
-        }
-
-        foreach (var pidFile in pidFiles)
-        {
-            var name = Path.GetFileNameWithoutExtension(pidFile);
-            var pidText = File.ReadAllText(pidFile).Trim();
-
-            if (int.TryParse(pidText, out var pid) && IsProcessRunning(pid))
+            var containerId = id.Trim();
+            try
             {
-                try
-                {
-                    var proc = Process.GetProcessById(pid);
-                    proc.Kill(entireProcessTree: true);
-                    Console.WriteLine($"  [{name}] Killed orphan process {pid}.");
-                }
-                catch (Exception ex)
-                {
-                    Console.Error.WriteLine($"  [{name}] Failed to kill PID {pid}: {ex.Message}");
-                }
+                RunDocker("stop", containerId);
+                Console.WriteLine($"  Stopped container {containerId}.");
             }
-            else
+            catch (Exception ex)
             {
-                Console.WriteLine($"  [{name}] Stale PID file (process {pidText} not running). Removing.");
+                Console.Error.WriteLine($"  Failed to stop container {containerId}: {ex.Message}");
             }
-
-            File.Delete(pidFile);
         }
 
         Console.WriteLine("Cleanup complete.");
     }
 
-    public static string GetLogPath(string modelName)
+    private static bool IsContainerRunning(string containerName)
     {
-        return Path.Combine(LogDir, $"{modelName}.log");
-    }
-
-    private static void WritePid(string name, int pid)
-    {
-        Directory.CreateDirectory(PidDir);
-        File.WriteAllText(Path.Combine(PidDir, $"{name}.pid"), pid.ToString());
-    }
-
-    private static int? ReadPid(string name)
-    {
-        var path = Path.Combine(PidDir, $"{name}.pid");
-        if (!File.Exists(path))
-            return null;
-
-        var text = File.ReadAllText(path).Trim();
-        return int.TryParse(text, out var pid) ? pid : null;
-    }
-
-    private static void RemovePid(string name)
-    {
-        var path = Path.Combine(PidDir, $"{name}.pid");
-        if (File.Exists(path))
-            File.Delete(path);
-    }
-
-    private static bool IsProcessRunning(int pid)
-    {
-        try
+        var psi = new ProcessStartInfo
         {
-            var proc = Process.GetProcessById(pid);
-            return !proc.HasExited;
-        }
-        catch
+            FileName = "docker",
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        psi.ArgumentList.Add("inspect");
+        psi.ArgumentList.Add("--format"); psi.ArgumentList.Add("{{.State.Running}}");
+        psi.ArgumentList.Add(containerName);
+
+        using var process = new Process { StartInfo = psi };
+        process.Start();
+        var output = process.StandardOutput.ReadToEnd().Trim();
+        process.WaitForExit();
+
+        return output == "true";
+    }
+
+    private static void RunDocker(params string[] args)
+    {
+        var psi = new ProcessStartInfo
         {
-            return false;
-        }
+            FileName = "docker",
+            UseShellExecute = false,
+            RedirectStandardError = true,
+        };
+        foreach (var arg in args)
+            psi.ArgumentList.Add(arg);
+
+        using var process = new Process { StartInfo = psi };
+        process.Start();
+        var stderr = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+
+        if (process.ExitCode != 0)
+            throw new Exception(stderr.Trim());
     }
 
     private static bool IsPortInUse(int port)
     {
         try
         {
-            using var listener = new TcpClient();
-            listener.Connect("127.0.0.1", port);
-            listener.Close();
+            using var client = new TcpClient();
+            client.Connect("127.0.0.1", port);
             return true;
         }
         catch (SocketException)
