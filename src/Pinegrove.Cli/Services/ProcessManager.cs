@@ -12,7 +12,7 @@ public sealed class ProcessManager
     {
         var containerName = DockerLauncher.GetContainerName(model.Name);
 
-        if (IsContainerRunning(containerName))
+        if (GetContainerStatus(containerName) == "running")
         {
             Console.WriteLine($"  [{model.Name}] Already running (container {containerName}). Skipping.");
             return;
@@ -27,6 +27,19 @@ public sealed class ProcessManager
         try
         {
             _launcher.Launch(model);
+
+            if (CrashedImmediately(containerName, out var crashLogs))
+            {
+                try { RunDocker("rm", containerName); } catch { }
+                Console.Error.WriteLine($"  [{model.Name}] FAILED: vllm exited immediately.");
+                if (!string.IsNullOrWhiteSpace(crashLogs))
+                {
+                    Console.Error.WriteLine();
+                    Console.Error.WriteLine(crashLogs);
+                }
+                return;
+            }
+
             Console.WriteLine($"  [{model.Name}] Started (container {containerName}, port {model.Port})");
         }
         catch (Exception ex)
@@ -38,16 +51,19 @@ public sealed class ProcessManager
     public void StopModel(string name)
     {
         var containerName = DockerLauncher.GetContainerName(name);
+        var status = GetContainerStatus(containerName);
 
-        if (!IsContainerRunning(containerName))
+        if (status is null)
         {
-            Console.WriteLine($"  [{name}] Not running. Nothing to stop.");
+            Console.WriteLine($"  [{name}] No container found. Nothing to stop.");
             return;
         }
 
         try
         {
-            RunDocker("stop", containerName);
+            if (status == "running")
+                RunDocker("stop", containerName);
+            RunDocker("rm", containerName);
             Console.WriteLine($"  [{name}] Stopped.");
         }
         catch (Exception ex)
@@ -69,7 +85,7 @@ public sealed class ProcessManager
         foreach (var model in config.Models)
         {
             var containerName = DockerLauncher.GetContainerName(model.Name);
-            var running = IsContainerRunning(containerName);
+            var running = GetContainerStatus(containerName) == "running";
 
             var status = new ModelStatus
             {
@@ -96,7 +112,7 @@ public sealed class ProcessManager
             RedirectStandardOutput = true,
         };
         psi.ArgumentList.Add("ps");
-        psi.ArgumentList.Add("-q");
+        psi.ArgumentList.Add("-aq");
         psi.ArgumentList.Add("--filter"); psi.ArgumentList.Add("name=pinegrove-");
 
         using var listProcess = new Process { StartInfo = psi };
@@ -106,7 +122,7 @@ public sealed class ProcessManager
 
         if (string.IsNullOrEmpty(output))
         {
-            Console.WriteLine("No pinegrove containers running. Nothing to clean up.");
+            Console.WriteLine("No pinegrove containers found. Nothing to clean up.");
             return;
         }
 
@@ -115,19 +131,41 @@ public sealed class ProcessManager
             var containerId = id.Trim();
             try
             {
-                RunDocker("stop", containerId);
-                Console.WriteLine($"  Stopped container {containerId}.");
+                RunDocker("rm", "-f", containerId);
+                Console.WriteLine($"  Removed container {containerId}.");
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"  Failed to stop container {containerId}: {ex.Message}");
+                Console.Error.WriteLine($"  Failed to remove container {containerId}: {ex.Message}");
             }
         }
 
         Console.WriteLine("Cleanup complete.");
     }
 
-    private static bool IsContainerRunning(string containerName)
+    // Polls for up to 3 seconds to detect an immediate crash (e.g. bad vllm args).
+    private static bool CrashedImmediately(string containerName, out string logs)
+    {
+        logs = string.Empty;
+        var deadline = DateTime.UtcNow.AddSeconds(3);
+
+        while (DateTime.UtcNow < deadline)
+        {
+            Thread.Sleep(500);
+            var status = GetContainerStatus(containerName);
+            if (status is "exited" or "dead")
+            {
+                logs = GetContainerLogs(containerName);
+                return true;
+            }
+            if (status == "running")
+                return false;
+        }
+
+        return false;
+    }
+
+    private static string? GetContainerStatus(string containerName)
     {
         var psi = new ProcessStartInfo
         {
@@ -137,7 +175,7 @@ public sealed class ProcessManager
             RedirectStandardError = true,
         };
         psi.ArgumentList.Add("inspect");
-        psi.ArgumentList.Add("--format"); psi.ArgumentList.Add("{{.State.Running}}");
+        psi.ArgumentList.Add("--format"); psi.ArgumentList.Add("{{.State.Status}}");
         psi.ArgumentList.Add(containerName);
 
         using var process = new Process { StartInfo = psi };
@@ -145,7 +183,29 @@ public sealed class ProcessManager
         var output = process.StandardOutput.ReadToEnd().Trim();
         process.WaitForExit();
 
-        return output == "true";
+        return process.ExitCode == 0 ? output : null;
+    }
+
+    private static string GetContainerLogs(string containerName)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = "docker",
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        psi.ArgumentList.Add("logs");
+        psi.ArgumentList.Add(containerName);
+
+        using var process = new Process { StartInfo = psi };
+        process.Start();
+        // Read both streams concurrently to avoid deadlocks
+        var stdout = process.StandardOutput.ReadToEndAsync();
+        var stderr = process.StandardError.ReadToEndAsync();
+        process.WaitForExit();
+
+        return (stdout.Result + stderr.Result).Trim();
     }
 
     private static void RunDocker(params string[] args)

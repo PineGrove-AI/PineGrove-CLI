@@ -24,7 +24,7 @@ public sealed class DockerLauncher
 
         psi.ArgumentList.Add("run");
         psi.ArgumentList.Add("-d");
-        psi.ArgumentList.Add("--rm");
+
         psi.ArgumentList.Add("--name"); psi.ArgumentList.Add(containerName);
         psi.ArgumentList.Add("--gpus"); psi.ArgumentList.Add("all");
         psi.ArgumentList.Add("--ipc=host");

@@ -21,6 +21,13 @@ public static class StartCommand
             try
             {
                 var config = ConfigLoader.Load(configPath);
+
+                if (!GpuChecker.Check())
+                {
+                    Environment.ExitCode = 1;
+                    return;
+                }
+
                 var pm = new ProcessManager();
 
                 Console.WriteLine($"Starting {config.Models.Count} model(s)...");
