@@ -47,10 +47,10 @@ public sealed class DockerLauncher
         {
             foreach (var (key, value) in model.Args)
             {
-                if (value is bool flag)
+                // YamlDotNet deserializes scalars in Dictionary<string,object> as strings,
+                // so `true` arrives as "true" not bool. Handle both.
+                if (value is bool flag || (value is string sv && bool.TryParse(sv, out flag)))
                 {
-                    // Boolean args are bare switches: `--trust-remote-code` with no value.
-                    // false means the flag is absent.
                     if (flag) psi.ArgumentList.Add($"--{key}");
                 }
                 else
