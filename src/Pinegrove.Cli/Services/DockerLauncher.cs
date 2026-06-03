@@ -47,8 +47,17 @@ public sealed class DockerLauncher
         {
             foreach (var (key, value) in model.Args)
             {
-                psi.ArgumentList.Add($"--{key}");
-                psi.ArgumentList.Add(value.ToString()!);
+                if (value is bool flag)
+                {
+                    // Boolean args are bare switches: `--trust-remote-code` with no value.
+                    // false means the flag is absent.
+                    if (flag) psi.ArgumentList.Add($"--{key}");
+                }
+                else
+                {
+                    psi.ArgumentList.Add($"--{key}");
+                    psi.ArgumentList.Add(value.ToString()!);
+                }
             }
         }
 
