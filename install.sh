@@ -26,10 +26,22 @@ if command -v nvidia-smi &>/dev/null; then
     fi
 fi
 
+# ── Resolve release (before welcome, so version is shown upfront) ──────────────
+
+RELEASE_JSON=$(curl -fsSL "${GITEA_API}/releases?limit=1") \
+    || die "Could not reach release API."
+RELEASE_VERSION=$(echo "$RELEASE_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['tag_name'])") \
+    || die "Could not parse release version."
+BINARY_URL=$(echo "$RELEASE_JSON" | python3 -c "
+import sys, json
+assets = json.load(sys.stdin)[0]['assets']
+print(next(a['browser_download_url'] for a in assets if a['name'] == 'pinegrove-cli'))
+") || die "Could not resolve download URL. Does a release exist?"
+
 # ── Intro & confirmation ───────────────────────────────────────────────────────
 
 echo -e ""
-echo -e "${BOLD}Welcome to PineGrove CLI${NC}"
+echo -e "${BOLD}Welcome to PineGrove CLI ($RELEASE_VERSION)${NC}"
 echo -e ""
 echo -e "This installer will set up:"
 echo -e "  • The pinegrove-cli binary"
@@ -46,13 +58,7 @@ echo ""
 info "Installing pinegrove-cli to $INSTALL_DIR"
 mkdir -p "$INSTALL_DIR" "$BIN_DIR"
 
-info "Downloading binary..."
-BINARY_URL=$(curl -fsSL "${GITEA_API}/releases?limit=1" \
-    | python3 -c "
-import sys, json
-assets = json.load(sys.stdin)[0]['assets']
-print(next(a['browser_download_url'] for a in assets if a['name'] == 'pinegrove-cli'))
-") || die "Could not resolve download URL. Does a release exist?"
+info "Downloading binary ($RELEASE_VERSION)..."
 curl -fsSL "$BINARY_URL" -o "$INSTALL_DIR/pinegrove-cli"
 chmod +x "$INSTALL_DIR/pinegrove-cli"
 

@@ -40,7 +40,7 @@ public sealed class DockerLauncher
 
         psi.ArgumentList.Add(VllmImage);
 
-        psi.ArgumentList.Add("--model"); psi.ArgumentList.Add(model.Model);
+        psi.ArgumentList.Add(model.Model);  // positional arg: vllm serve <model>
         psi.ArgumentList.Add("--port"); psi.ArgumentList.Add(model.Port.ToString());
 
         if (model.Args is not null)
