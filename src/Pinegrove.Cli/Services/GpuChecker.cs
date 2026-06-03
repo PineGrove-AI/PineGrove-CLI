@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Pinegrove.Cli.Models;
 
 namespace Pinegrove.Cli.Services;
 
@@ -9,6 +10,48 @@ public static class GpuChecker
     public static bool Check()
     {
         return CheckNvidiaSmi() && CheckDockerGpu();
+    }
+
+    /// <summary>
+    /// Parses nvidia-smi to detect GPU count and per-GPU VRAM.
+    /// Returns null if nvidia-smi is unavailable or output cannot be parsed.
+    /// </summary>
+    public static GpuInfo? DetectGpuDetails()
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = "nvidia-smi",
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        psi.ArgumentList.Add("--query-gpu=memory.total");
+        psi.ArgumentList.Add("--format=csv,noheader,nounits");
+
+        try
+        {
+            using var process = new Process { StartInfo = psi };
+            process.Start();
+            var output = process.StandardOutput.ReadToEnd();
+            process.WaitForExit();
+
+            if (process.ExitCode != 0)
+                return null;
+
+            var info = new GpuInfo();
+            foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (int.TryParse(line.Trim(), out var mib))
+                    info.VramPerGpuMiB.Add(mib);
+            }
+
+            info.GpuCount = info.VramPerGpuMiB.Count;
+            return info.GpuCount > 0 ? info : null;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static bool CheckNvidiaSmi()
