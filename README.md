@@ -5,6 +5,7 @@ Welcome to the PineGrove CLI!
 This CLI translates a simple config file into fully functional vllm docker containers, allowing you to easily run and manage 
 LLMs optimized for your PineGrove application, and with all dependencies handled for you.
 
+This config can be built through the CLI itself guiding you through model selection based on your use-case and hardware via `pinegrove-cli init`.
 
 ## Prerequisites
 
