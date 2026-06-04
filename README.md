@@ -16,7 +16,7 @@ This CLI requires:
 ## Installation 
 
 ```bash
-curl -fsSL https://git.getpinegrove.eu/pinegrove-community/pinegrove-cli/raw/branch/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/PineGrove-AI/PineGrove-CLI/refs/heads/main/install.sh | bash
 ```
 
 The installer downloads the CLI binary, checks for relevant dependencies based on your hardware, and adds the CLI to your PATH. 
