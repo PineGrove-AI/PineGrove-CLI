@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-GITEA_API="https://git.getpinegrove.eu/api/v1/repos/pinegrove-community/pinegrove-cli"
+OWNER="PineGrove-AI"
+REPO="PineGrove-CLI"
+
+GITHUB_API="https://api.github.com/repos/${OWNER}/${REPO}"
 INSTALL_DIR="${PINEGROVE_INSTALL_DIR:-$HOME/.local/share/pinegrove-cli}"
 BIN_DIR="${PINEGROVE_BIN_DIR:-$HOME/.local/bin}"
 
@@ -28,7 +31,7 @@ fi
 
 # ── Resolve release (before welcome, so version is shown upfront) ──────────────
 
-RELEASE_JSON=$(curl -fsSL "${GITEA_API}/releases?limit=1") \
+RELEASE_JSON=$(curl -fsSL "${GITHUB_API}/releases?limit=1") \
     || die "Could not reach release API."
 RELEASE_VERSION=$(echo "$RELEASE_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['tag_name'])") \
     || die "Could not parse release version."
