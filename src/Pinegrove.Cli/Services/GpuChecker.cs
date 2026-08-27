@@ -7,8 +7,29 @@ public static class GpuChecker
 {
     private const string CudaTestImage = "nvidia/cuda:12.4.1-base-ubuntu22.04";
 
-    public static bool Check()
+    /// <summary>
+    /// Preflight the GPU stack. Pass <paramref name="required"/> = false when no
+    /// configured model actually asks for a GPU -- otherwise a CPU-only service
+    /// (e.g. an Infinity embedding container) cannot be started on a box whose
+    /// GPU is unavailable, which is a failure mode unrelated to that service.
+    ///
+    /// Set PINEGROVE_SKIP_GPU_CHECK=1 to bypass. That is for the case where the
+    /// host nvidia-smi is broken but containers still work -- notably when the
+    /// driver packages have been upgraded and the kernel module has not yet been
+    /// reloaded, so the loaded module and the userspace libraries disagree.
+    /// </summary>
+    public static bool Check(bool required = true)
     {
+        if (!required)
+            return true;
+
+        var skip = Environment.GetEnvironmentVariable("PINEGROVE_SKIP_GPU_CHECK");
+        if (!string.IsNullOrEmpty(skip) && skip != "0")
+        {
+            Console.Error.WriteLine("warning: PINEGROVE_SKIP_GPU_CHECK set -- skipping GPU preflight.");
+            return true;
+        }
+
         return CheckNvidiaSmi() && CheckDockerGpu();
     }
 

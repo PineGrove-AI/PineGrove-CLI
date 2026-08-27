@@ -13,9 +13,16 @@ public sealed class DockerLauncher
     public void Launch(ModelConfig model)
     {
         var containerName = GetContainerName(model.Name);
-        var hfCacheDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".cache", "huggingface");
+        // Weights can be huge and $HOME is often the smallest volume on a rented
+        // GPU box, so allow the cache to be redirected at the mount point.
+        var hfCacheDir = Environment.GetEnvironmentVariable("PINEGROVE_HF_CACHE");
+        if (string.IsNullOrWhiteSpace(hfCacheDir))
+        {
+            hfCacheDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                ".cache", "huggingface");
+        }
+        hfCacheDir = ExpandHome(hfCacheDir.Trim());
 
         var psi = new ProcessStartInfo
         {
@@ -29,9 +36,10 @@ public sealed class DockerLauncher
         a.Add("-d");
         a.Add("--name"); a.Add(containerName);
 
-        if (model.Gpus)
+        var gpus = ResolveGpus(model.Gpus);
+        if (gpus is not null)
         {
-            a.Add("--gpus"); a.Add("all");
+            a.Add("--gpus"); a.Add(gpus);
         }
 
         a.Add("--ipc=host");
@@ -140,6 +148,17 @@ public sealed class DockerLauncher
                 a.Add(value.ToString()!);
             }
         }
+    }
+
+    // null => omit the flag entirely. Unset defaults to "all" so existing
+    // configs that never mentioned `gpus:` keep working.
+    private static string? ResolveGpus(string? value)
+    {
+        var v = (value ?? "true").Trim();
+        if (v.Length == 0) return "all";
+        if (bool.TryParse(v, out var flag)) return flag ? "all" : null;
+        if (string.Equals(v, "none", StringComparison.OrdinalIgnoreCase)) return null;
+        return v;
     }
 
     private static string ExpandHome(string p) =>

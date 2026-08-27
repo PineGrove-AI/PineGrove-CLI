@@ -13,7 +13,12 @@ public sealed class ModelConfig
     // "container"         : run the image's own ENTRYPOINT/CMD (+ optional `command`); the model is selected via `env`.
     public string Backend { get; set; } = "vllm";
     public string? Image { get; set; }                 // overrides the per-backend default image
-    public bool Gpus { get; set; } = true;             // false => CPU workload, omit --gpus all
+    // GPU selection. Accepts a bool or a docker device spec, so a config can pin
+    // a model to one card on a multi-GPU box:
+    //   (unset) / true / "all"  => --gpus all        (default, back-compatible)
+    //   false / "none"          => no --gpus flag    (CPU workload)
+    //   "device=0" / "device=0,1" / "1" => --gpus <value>
+    public string? Gpus { get; set; }
     public string Restart { get; set; } = "no";        // docker --restart policy (e.g. unless-stopped)
     public Dictionary<string, string>? Env { get; set; } // -e KEY=VALUE
     public List<string>? Volumes { get; set; }         // extra -v mounts ("host:container", leading ~ expanded)

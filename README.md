@@ -43,6 +43,13 @@ To stop it, run:
 pinegrove-cli stop 
 ```
 
+## Environment variables
+
+| variable | effect |
+|---|---|
+| `PINEGROVE_HF_CACHE` | Host directory to mount as the container Hugging Face cache. Defaults to `~/.cache/huggingface`. Useful when `$HOME` is not where the disk is — model weights are large, and on a rented GPU box the roomy volume is usually mounted elsewhere. |
+| `PINEGROVE_SKIP_GPU_CHECK` | Set to `1` to skip the GPU preflight in `start`. The preflight is also skipped automatically when no configured model requests a GPU. Use this when the host `nvidia-smi` is broken but containers still work — for example after a driver package upgrade whose kernel module has not been reloaded yet. |
+
 ## Status & Logs
 Status and logs can be accessed via Docker in the usual ways (`docker ps`, `docker logs <container-id>`, etc.), but the CLI also provides some convenient commands to access this information.
 

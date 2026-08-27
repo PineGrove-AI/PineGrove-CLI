@@ -22,7 +22,12 @@ public static class StartCommand
             {
                 var config = ConfigLoader.Load(configPath);
 
-                if (!GpuChecker.Check())
+                // Only preflight the GPU if something we are about to start needs it.
+                var needsGpu = config.Models.Any(m =>
+                    !string.Equals((m.Gpus ?? "true").Trim(), "false", StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals((m.Gpus ?? "true").Trim(), "none", StringComparison.OrdinalIgnoreCase));
+
+                if (!GpuChecker.Check(needsGpu))
                 {
                     Environment.ExitCode = 1;
                     return;

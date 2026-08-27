@@ -11,3 +11,13 @@ models:
     port: 8001
     args:
       max-model-len: 4096
+
+  # `gpus:` selects which GPUs a model gets. Omit it (or `true`) for all of
+  # them; use a docker device spec to pin a model to one card on a multi-GPU
+  # box, or `false` for a CPU-only workload.
+  - name: embeddings
+    model: BAAI/bge-large-en-v1.5
+    port: 8002
+    gpus: "device=1"
+    args:
+      max-model-len: 512
