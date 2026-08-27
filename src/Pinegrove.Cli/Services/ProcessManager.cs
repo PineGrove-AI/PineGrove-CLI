@@ -94,7 +94,7 @@ public sealed class ProcessManager
                 Port = model.Port,
                 ContainerName = containerName,
                 State = running ? "running" : "stopped",
-                Healthy = running && await CheckHealthAsync(model.Port),
+                Healthy = running && await CheckHealthAsync(model.Port, model.HealthPath),
             };
 
             statuses.Add(status);
@@ -242,12 +242,13 @@ public sealed class ProcessManager
         }
     }
 
-    private static async Task<bool> CheckHealthAsync(int port)
+    private static async Task<bool> CheckHealthAsync(int port, string? path)
     {
+        var healthPath = string.IsNullOrWhiteSpace(path) ? "/health" : (path.StartsWith('/') ? path : "/" + path);
         try
         {
             using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
-            var response = await http.GetAsync($"http://127.0.0.1:{port}/health");
+            var response = await http.GetAsync($"http://127.0.0.1:{port}{healthPath}");
             return response.IsSuccessStatusCode;
         }
         catch

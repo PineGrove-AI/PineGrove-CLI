@@ -7,24 +7,49 @@ public static class StopCommand
 {
     public static Command Create()
     {
+        var nameArg = new Argument<string?>(
+            "model-name",
+            () => null,
+            "Optional: stop only this model. Omit to stop all.");
+
         var configOption = new Option<string?>(
             "--config",
             "Path to pinegrove-config.yaml");
 
-        var cmd = new Command("stop", "Stop all managed vLLM model servers")
+        var cmd = new Command("stop", "Stop managed model servers (all, or a single named one without bouncing the rest)")
         {
+            nameArg,
             configOption,
         };
 
-        cmd.SetHandler(configPath =>
+        cmd.SetHandler((name, configPath) =>
         {
             try
             {
                 var config = ConfigLoader.Load(configPath);
                 var pm = new ProcessManager();
 
-                Console.WriteLine("Stopping all models...");
-                pm.StopAll(config);
+                if (string.IsNullOrWhiteSpace(name))
+                {
+                    Console.WriteLine("Stopping all models...");
+                    pm.StopAll(config);
+                }
+                else
+                {
+                    var model = config.Models.Find(m =>
+                        string.Equals(m.Name, name, StringComparison.OrdinalIgnoreCase));
+
+                    if (model is null)
+                    {
+                        Console.Error.WriteLine($"Model '{name}' not found in configuration.");
+                        Environment.ExitCode = 1;
+                        return;
+                    }
+
+                    Console.WriteLine($"Stopping '{name}'...");
+                    pm.StopModel(name);
+                }
+
                 Console.WriteLine("Done.");
             }
             catch (Exception ex)
@@ -32,7 +57,7 @@ public static class StopCommand
                 Console.Error.WriteLine($"Error: {ex.Message}");
                 Environment.ExitCode = 1;
             }
-        }, configOption);
+        }, nameArg, configOption);
 
         return cmd;
     }

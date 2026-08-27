@@ -70,8 +70,15 @@ public static class ConfigLoader
             if (string.IsNullOrWhiteSpace(model.Name))
                 throw new InvalidOperationException("Each model must have a 'name'.");
 
-            if (string.IsNullOrWhiteSpace(model.Model))
-                throw new InvalidOperationException($"Model '{model.Name}' is missing the 'model' field.");
+            var backend = (model.Backend ?? "vllm").Trim().ToLowerInvariant();
+
+            var hasModelIds = model.ModelIds is { Count: > 0 };
+            if (string.IsNullOrWhiteSpace(model.Model) && backend != "container" && !(backend == "infinity" && hasModelIds))
+                throw new InvalidOperationException(
+                    $"Model '{model.Name}' is missing the 'model' field (or 'model-ids' for an infinity backend).");
+
+            if (backend == "container" && string.IsNullOrWhiteSpace(model.Image))
+                throw new InvalidOperationException($"Model '{model.Name}' (backend 'container') requires an 'image'.");
 
             if (model.Port is < 1 or > 65535)
                 throw new InvalidOperationException(
